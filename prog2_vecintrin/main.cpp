@@ -250,6 +250,62 @@ void clampedExpVector(float* values, int* exponents, float* output, int N) {
   // N and VECTOR_WIDTH, not just when VECTOR_WIDTH divides N
   //
   
+  // pad values and exponents to be multiples of VECTOR_WIDTH
+  // create two new arrays to store the padded values and exponents
+  int pad = VECTOR_WIDTH - (N % VECTOR_WIDTH);
+  int N_padded = N + pad;
+  float* values_padded = new float[N_padded];
+  int* exponents_padded = new int[N_padded];
+  // Copy the original values into the new padded arrays
+  memcpy(values_padded, values, N * sizeof(float));
+  memcpy(exponents_padded, exponents, N * sizeof(int));
+
+  // Pad the remaining space with zeros
+  std::fill(values_padded + N, values_padded + N_padded, 0.0f);
+  std::fill(exponents_padded + N, exponents_padded + N_padded, 0);
+
+  __cs149_vec_float x;
+  __cs149_vec_int y;
+  __cs149_vec_float result;
+  __cs149_vec_int zero = _cs149_vset_int(0);
+  __cs149_vec_int one = _cs149_vset_int(1);
+  __cs149_vec_float one_float = _cs149_vset_float(1.f);
+  __cs149_vec_float max = _cs149_vset_float(9.999999f);
+  __cs149_mask maskAll, maskIsZero, maskIsNotZero, maskIsSmallerThanZero, maskIsGreaterThanMax;
+
+  for (int i=0; i<N; i+=VECTOR_WIDTH) {
+    result = _cs149_vset_float(1.f);
+    maskAll = _cs149_init_ones();
+    maskIsZero = _cs149_init_ones(0);
+    _cs149_vload_float(x, values_padded+i, maskAll);
+    _cs149_vload_int(y, exponents_padded+i, maskAll);
+  
+    _cs149_veq_int(maskIsZero, y, zero, maskAll);
+    _cs149_vlt_int(maskIsSmallerThanZero, y, zero, maskAll);
+    _cs149_vabs_int(y, y, maskAll);
+
+    
+    maskIsNotZero = _cs149_mask_not(maskIsZero);
+
+    while (_cs149_cntbits(maskIsNotZero) > 0) {
+      _cs149_vmult_float(result, result, x, maskIsNotZero);
+      _cs149_vsub_int(y, y, one, maskIsNotZero);
+      _cs149_vgt_int(maskIsNotZero, y, zero, maskAll);             
+    }
+
+    // write one divided by result
+    _cs149_vdiv_float(result, one_float, result, maskIsSmallerThanZero);
+
+    // clamp result
+    _cs149_vgt_float(maskIsGreaterThanMax, result, max, maskAll); 
+    _cs149_vset_float(result, 9.999999f, maskIsGreaterThanMax);
+    
+    // write result to output
+    _cs149_vstore_float(values_padded+i, result, maskAll);
+  }
+
+  // Copy first N of the padded values to the result array
+  memcpy(output, values_padded, N * sizeof(float));
 }
 
 // returns the sum of all elements in values
