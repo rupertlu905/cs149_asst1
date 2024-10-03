@@ -326,6 +326,12 @@ float arraySumVector(float* values, int N) {
   //
   // CS149 STUDENTS TODO: Implement your vectorized version of arraySumSerial here
   //
+
+  // Idea:
+  // load values into vector registers
+  // sum the vector registers across each lane -> N/VECTOR_WIDTH times
+  // store the result of each lane in a scalar register
+  // sum the scalar registers to get the final result (sum every two pairs recursively) -> log2(VECTOR_WIDTH) times
   
   for (int i=0; i<N; i+=VECTOR_WIDTH) {
 
