@@ -320,11 +320,25 @@ float arraySumVector(float* values, int N) {
   // sum the vector registers across each lane -> N/VECTOR_WIDTH times
   // store the result of each lane in a scalar register
   // sum the scalar registers to get the final result (sum every two pairs recursively) -> log2(VECTOR_WIDTH) times
+
+  __cs149_vec_float values_vec;
+  __cs149_vec_float sums_vec = _cs149_vset_float(0.f);
+  __cs149_mask maskAll = _cs149_init_ones();
   
   for (int i=0; i<N; i+=VECTOR_WIDTH) {
-
+    _cs149_vload_float(values_vec, values+i, maskAll);
+    _cs149_vadd_float(sums_vec, sums_vec, values_vec, maskAll);
   }
 
-  return 0.0;
+  for (int i=VECTOR_WIDTH; i>1; i/=2) {
+    _cs149_hadd_float(sums_vec, sums_vec);
+    _cs149_interleave_float(sums_vec, sums_vec);
+  }
+
+  float result;
+  __cs149_mask mask_sum = _cs149_init_ones(1);
+  _cs149_vstore_float(&result, sums_vec, mask_sum);
+
+  return result;
 }
 
