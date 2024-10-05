@@ -19,6 +19,8 @@ typedef struct {
   int *clusterAssignments;
   double *currCost;
   int M, N, K;
+  int numThreads;
+  double *perThreadTime;
 } WorkerArgs;
 
 
@@ -62,9 +64,9 @@ double dist(double *x, double *y, int nDim) {
   return sqrt(accum);
 }
 
-/**
- * Assigns each data point to its "closest" cluster centroid.
- */
+// /**
+//  * Assigns each data point to its "closest" cluster centroid.
+//  */
 // void computeAssignments(WorkerArgs *const args) {
 //   double *minDist = new double[args->M];
   
@@ -89,7 +91,9 @@ double dist(double *x, double *y, int nDim) {
 //   free(minDist);
 // }
 
-void computeAssignmentsThread(WorkerArgs *args, int start, int end, int numDataPoints) {
+void computeAssignmentsThread(WorkerArgs *args, int start, int end, int numDataPoints, int threadId) {
+    double startTime = CycleTimer::currentSeconds();
+
     // Each thread should have its own local minDist array to avoid conflicts
     double *minDist = new double[numDataPoints];
 
@@ -111,19 +115,23 @@ void computeAssignmentsThread(WorkerArgs *args, int start, int end, int numDataP
         }
     }
 
-    delete[] minDist; 
+    delete[] minDist;
+
+    double endTime = CycleTimer::currentSeconds();
+
+    args->perThreadTime[threadId] += (endTime - startTime);
+
 }
 
 void computeAssignments(WorkerArgs *args) {
-    int numThreads = std::thread::hardware_concurrency();
-    int chunkSize = args->M / numThreads; 
+    int chunkSize = args->M / args->numThreads;
 
-    std::vector<std::thread> threads;
-    for (int t = 0; t < numThreads; t++) {
+    std::thread threads[args->numThreads];
+    for (int t = 0; t < args->numThreads; t++) {
         int start = t * chunkSize;
-        int end = (t == numThreads - 1) ? args->M : start + chunkSize;
+        int end = (t == args->numThreads - 1) ? args->M : start + chunkSize;
 
-        threads.emplace_back(computeAssignmentsThread, args, start, end, end - start);
+        threads[t] = std::thread(computeAssignmentsThread, args, start, end, end - start, t);
     }
 
     // Join threads after they finish their work
@@ -233,6 +241,9 @@ void kMeansThread(double *data, double *clusterCentroids, int *clusterAssignment
     args.M = M;
     args.N = N;
     args.K = K;
+    args.numThreads = std::thread::hardware_concurrency();
+    args.perThreadTime = new double[args.numThreads];
+    memset(args.perThreadTime, 0, args.numThreads * sizeof(double));
 
     // Initialize arrays to track cost
     for (int k = 0; k < K; k++) {
@@ -285,6 +296,11 @@ void kMeansThread(double *data, double *clusterCentroids, int *clusterAssignment
 
     free(currCost);
     free(prevCost);
+
+    for (int i = 0; i < args.numThreads; i++) {
+      printf("[Info] Hello from computeAssignments() thread #%d, total execution time: %lf seconds\n", i, args.perThreadTime[i]);
+    }
+    free(args.perThreadTime);
 
     // Print out timing information
     printf("Total time spent in assignments: %f seconds\n", totalAssignmentTime);
