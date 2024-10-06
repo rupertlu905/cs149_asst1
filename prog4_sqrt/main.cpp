@@ -5,6 +5,7 @@
 
 #include "CycleTimer.h"
 #include "sqrt_ispc.h"
+#include "sqrt_avx2.h"
 
 using namespace ispc;
 
@@ -82,7 +83,8 @@ int main() {
     double minISPC = 1e30;
     for (int i = 0; i < 3; ++i) {
         double startTime = CycleTimer::currentSeconds();
-        sqrt_ispc(N, initialGuess, values, output);
+        // sqrt_ispc(N, initialGuess, values, output);
+        sqrt_avx2(N, initialGuess, values, output);
         double endTime = CycleTimer::currentSeconds();
         minISPC = std::min(minISPC, endTime - startTime);
     }

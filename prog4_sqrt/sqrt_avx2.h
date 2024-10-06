@@ -8,6 +8,6 @@
 extern const float kThreshold;
 
 // Function declaration
-void sqrt_avx2(const int N, const float initialGuess, const float* values, float* output);
+void sqrt_avx2(int N, float initialGuess, const float* values, float* output);
 
 #endif // SQRT_AVX2_H
