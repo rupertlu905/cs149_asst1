@@ -59,12 +59,9 @@ static bool stoppingConditionMet(double *prevCost, double *currCost,
 double dist(double *x, double *y, int nDim) {
   double accum = 0.0;
   for (int i = 0; i < nDim; i++) {
-    // accum += pow((x[i] - y[i]), 2);
-    double diff = x[i] - y[i];
-    accum += diff * diff;
+    accum += pow((x[i] - y[i]), 2);
   }
-  // return sqrt(accum);
-  return accum;
+  return sqrt(accum);
 }
 
 // /**
@@ -94,46 +91,53 @@ double dist(double *x, double *y, int nDim) {
 //   free(minDist);
 // }
 
-
-void computeAssignmentsThread(WorkerArgs *args, int threadId, double *minDist) {
+void computeAssignmentsThread(WorkerArgs *args, int start, int end, int numDataPoints, int threadId) {
     double startTime = CycleTimer::currentSeconds();
 
-      for (int m = threadId; m < args->M; m += args->numThreads) {
+    // Each thread should have its own local minDist array to avoid conflicts
+    double *minDist = new double[numDataPoints];
+
+    // Initialize arrays
+    for (int m = 0; m < numDataPoints; m++) {
+        minDist[m] = 1e30;
+        args->clusterAssignments[m + start] = -1; 
+    }
+
+    // Assign data points to closest centroids
+    for (int m = start; m < end; m++) {
         for (int k = 0; k < args->K; k++) {
             double d = dist(&args->data[m * args->N],
                             &args->clusterCentroids[k * args->N], args->N);
-            if (d < minDist[m]) { 
-                minDist[m] = d;
+            if (d < minDist[m - start]) { 
+                minDist[m - start] = d;
                 args->clusterAssignments[m] = k; 
             }
         }
     }
 
+    delete[] minDist;
+
     double endTime = CycleTimer::currentSeconds();
 
     args->perThreadTime[threadId] += (endTime - startTime);
+
 }
 
 void computeAssignments(WorkerArgs *args) {
-    double *minDist = new double[args->M];
-    for (int m = 0; m < args->M; m++) {
-        minDist[m] = 1e30;
-        args->clusterAssignments[m] = -1; 
-    }
+    int chunkSize = args->M / args->numThreads;
 
-    std::thread *threads = new std::thread[args->numThreads];
+    std::thread threads[args->numThreads];
     for (int t = 0; t < args->numThreads; t++) {
-        threads[t] = std::thread(computeAssignmentsThread, args, t, minDist);
+        int start = t * chunkSize;
+        int end = (t == args->numThreads - 1) ? args->M : start + chunkSize;
+
+        threads[t] = std::thread(computeAssignmentsThread, args, start, end, end - start, t);
     }
 
-    for (int t = 0; t < args->numThreads; t++) {
-        if (threads[t].joinable()) {
-            threads[t].join();
-        }
+    // Join threads after they finish their work
+    for (std::thread &thread : threads) {
+        thread.join();
     }
-
-    delete[] threads;
-    delete[] minDist;
 }
 
 
@@ -304,4 +308,3 @@ void kMeansThread(double *data, double *clusterCentroids, int *clusterAssignment
     printf("Total time spent in cost computation: %f seconds\n", totalCostTime);
     printf("Total time spent in main loop: %f seconds\n", totalLoopTime);
 }
-
